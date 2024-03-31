@@ -74,52 +74,87 @@ const CourseInfo = {
         score: 140,
       },
     },
-  ];
+];
   
-  function getLearnerData(course, ag, submissions) {
-    try {
-      if (!course || !ag || !submissions) {
-        throw new Error("error");
-      } else {
-        //console.log
-        let result = [];
-        let studentList = [];
-        submissions.forEach((submission) => {
-          if (!studentList.includes(submission.learner_id)) {
-            studentList.push(submission.learner_id);
+const getLearnerData = (course, assignmentGroup, learnerSubmissions) => {
+        const result = [];
+      
+        try {
+          const courseId = course.id;
+          if (courseId !== assignmentGroup.course_id) {
+            throw new Error(
+              `Course ID mismatch, expected ${courseId}, got ${ag.course_id}`,
+            );
           }
-        });
-        console.log(studentList);
-        studentList.forEach((student) => {
-          result.push({ id: student });
-        });
-        console.log(result);
-      }
-    } catch (error) {
-      console.error(error);
-      return;
-    }
-  
-    // here, we would process this data to achieve the desired result.
-    /*const result = [
-      {
-        id: 125,
-        avg: 0.985, // (47 + 150) / (50 + 150)
-        1: 0.94, // 47 / 50
-        2: 1.0, // 150 / 150
-      },
-      {
-        id: 132,
-        avg: 0.82, // (39 + 125) / (50 + 150)
-        1: 0.78, // 39 / 50
-        2: 0.833, // late: (140 - 15) / 150
-      },
-    ];*/
-  
-    return result;
-  }
-  
-  const result = getLearnerData(CourseInfo, AssignmentGroup, LearnerSubmissions);
-  
-  console.log(result);
-  
+      
+          const learnerMap = new Map();
+          for (const submission of learnerSubmissions) {
+            const {
+              learner_id,
+              assignment_id,
+              submission: { submitted_at, score },
+            } = submission;
+            if (!learnerMap.has(learner_id)) {
+              learnerMap.set(learner_id, [[assignment_id, { submitted_at, score }]]);
+            } else {
+              learnerMap
+                .get(learner_id)
+                .push([assignment_id, { submitted_at, score }]);
+            }
+          }
+      
+          learnerMap.forEach((value, key) => {
+            const student = {
+              id: key,
+              avg: 0,
+            };
+            let totalScore = 0;
+            let totalPossibleScore = 0;
+      
+            for (const [assignmentIndex, submission] of value) {
+              const submittedAtDate = new Date(submission.submitted_at);
+              const dueAtDate = new Date(
+                assignmentGroup.assignments[assignmentIndex - 1].due_at,
+              );
+              const currentDate = new Date();
+      
+              try {
+                if (dueAtDate < currentDate) {
+                  const assignment = assignmentGroup.assignments[assignmentIndex - 1];
+                  const { id: assignmentId, points_possible } = assignment;
+                  const submissionScore = submission.score;
+      
+                  student[assignmentIndex] = submissionScore / points_possible;
+      
+                  if (assignmentIndex === assignmentId) {
+                    if (submittedAtDate > dueAtDate) {
+                      student[assignmentIndex] = parseFloat(
+                        ((submissionScore / points_possible) * 0.9).toFixed(2),
+                      );
+                      totalScore += submissionScore * 0.9;
+                      totalPossibleScore += points_possible;
+                    } else {
+                      totalScore += submissionScore;
+                      totalPossibleScore += points_possible;
+                    }
+                  }
+                }
+              } catch (error) {
+                console.error("Error processing data:", error.message);
+                break;
+              }
+            }
+      
+            student.avg = totalScore / totalPossibleScore;
+            result.push(student);
+          });
+        } catch (error) {
+          console.log(`Error: ${error.message}`);
+        }
+      
+        return result;
+      };
+      
+      const result = getLearnerData(CourseInfo, AssignmentGroup, LearnerSubmissions);
+      console.log(result);
+      
